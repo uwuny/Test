@@ -41,15 +41,13 @@ button.active { background:#4a6ed1; border-color:#6f8fff; }
 <div id="table"></div>
 
 <py-script>
-import json
-import re
-from js import document, console
+import json, re
+from js import document
 
 DATA = {"battles": []}
 CURRENT_TYPE = "damage"
-
-# Словарь танков (можно заполнить)
 TANK_NAME_MAP = {}
+
 def clean_tank_name(code):
     tag = code.split(":")[-1]
     return TANK_NAME_MAP.get(tag, tag)
@@ -115,7 +113,6 @@ async def handle_files(files):
 def load_table(type, btn):
     global CURRENT_TYPE
     CURRENT_TYPE = type
-    # подсветка кнопок
     for b in document.querySelectorAll("button"):
         b.classList.remove("active")
     if btn:
@@ -132,18 +129,14 @@ def load_table(type, btn):
             if type=="hits": value = f'{p["shots"]}/{p["hits"]}/{p["piercings"]}'
             if type=="assist": value = p["assist_track"] + p["assist_radio"]
             players[name][i] = {**p, "value": value}
-    # среднее
     averages = {}
     for name, battles_dict in players.items():
-        sumv = 0
-        count = 0
+        sumv=count=0
         for i in range(len(battles)):
             cell = battles_dict.get(i)
             if cell and isinstance(cell["value"], (int,float)):
-                sumv += cell["value"]
-                count += 1
+                sumv+=cell["value"]; count+=1
         averages[name] = round(sumv/count) if count>0 else 0
-    # строим таблицу
     html = "<table><tr><th>Ник</th>"
     if type=="hits": html+="<th>%</th>"
     for b in battles:
@@ -152,15 +145,13 @@ def load_table(type, btn):
         html += f'<th class="{cls}">{mapname}</th>'
     if type!="hits": html += "<th>Среднее</th>"
     html += "</tr>"
-    # строки игроков
     for name, battles_dict in players.items():
         html += f"<tr><td>{name}</td>"
         if type=="hits":
             shots=hits=pen=0
             for i in range(len(battles)):
                 cell = battles_dict.get(i)
-                if cell:
-                    shots+=cell["shots"]; hits+=cell["hits"]; pen+=cell["piercings"]
+                if cell: shots+=cell["shots"]; hits+=cell["hits"]; pen+=cell["piercings"]
             percent = round(pen/hits*100) if hits>0 else 0
             html += f"<td>{percent}%</td>"
         for i in range(len(battles)):
@@ -178,20 +169,14 @@ def load_table(type, btn):
     html += "</table>"
     document.getElementById("table").innerHTML = html
 
-# Drag-and-drop
 dropzone = document.getElementById("dropzone")
-def on_dragover(e):
-    e.preventDefault()
-    dropzone.classList.add("hover")
-def on_dragleave(e):
-    dropzone.classList.remove("hover")
+def on_dragover(e): e.preventDefault(); dropzone.classList.add("hover")
+def on_dragleave(e): dropzone.classList.remove("hover")
 async def on_drop(e):
     e.preventDefault()
     dropzone.classList.remove("hover")
     files = [f for f in e.dataTransfer.files.to_py() if f.name.endswith(".mtreplay")]
-    if files:
-        await handle_files(files)
-
+    if files: await handle_files(files)
 dropzone.addEventListener("dragover", on_dragover)
 dropzone.addEventListener("dragleave", on_dragleave)
 dropzone.addEventListener("drop", on_drop)

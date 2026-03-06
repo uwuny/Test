@@ -36,7 +36,7 @@ function cleanTankName(code){
     return TANK_NAME_MAP[tag] || tag;
 }
 
-// --- Извлечение JSON блоков из .mtreplay ---
+// --- Извлечение JSON блоков ---
 function extractJsonBlocks(text){
     let blocks = [];
     let balance = 0, start = null;
@@ -55,14 +55,17 @@ function extractJsonBlocks(text){
     return blocks;
 }
 
-// --- Парсинг одного .mtreplay ---
+// --- Парсинг одного .mtreplay через ArrayBuffer + TextDecoder ---
 function parseReplay(file, callback){
     const reader = new FileReader();
     reader.onload = e=>{
         try {
-            const text = e.target.result;
+            const arrayBuffer = e.target.result;
+            const decoder = new TextDecoder("utf-8", {fatal: false});
+            const text = decoder.decode(arrayBuffer);
+
             const blocks = extractJsonBlocks(text);
-            if(blocks.length<2) throw "Нет JSON блоков";
+            if(blocks.length < 2) throw "Нет JSON блоков";
 
             const meta = JSON.parse(blocks[0]);
             const battle = JSON.parse(blocks[1]);
@@ -128,7 +131,7 @@ function parseReplay(file, callback){
             console.error("Ошибка парсинга:", file.name, err);
         }
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);  // ключевой момент!
 }
 
 // --- Общая обработка файлов ---

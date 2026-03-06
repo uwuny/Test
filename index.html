@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Статистика боёв</title>
+<style>
+body { background:#1e1e1e; color:white; font-family:Arial; margin:0; padding:0; }
+#table { overflow-x:auto; }
+table { border-collapse:collapse; margin-top:10px; }
+td,th { border:1px solid #444; padding:4px 6px; text-align:center; }
+th { background:#262626; line-height:1.1; }
+tr:hover td { background:#2a2a2a; }
+tr:hover td:first-child { background:#333; }
+td:first-child { font-family: Bahnschrift, Arial, sans-serif; font-weight:bold; position:sticky; left:0; z-index:2; background:#1e1e1e; }
+th:first-child { position:sticky; left:0; z-index:3; background:#262626; }
+.win { background:#2e5e2e; }
+.lose { background:#5e2e2e; }
+.alive { color:#6bd16b; }
+.dead { color:#d16b6b; }
+button { background:#2b2b2b; color:white; border:1px solid #444; padding:6px 12px; margin:4px; border-radius:6px; font-size:14px; cursor:pointer; transition:0.15s; }
+button:hover { background:#3a3a3a; border-color:#666; }
+button.active { background:#4a6ed1; border-color:#6f8fff; }
+</style>
+</head>
+<body>
+
+<h2>Статистика</h2>
+
+<input type="file" id="replayInput" multiple>
+<button onclick="loadTable('damage',event)">Урон</button>
+<button onclick="loadTable('damage_received',event)">Получено</button>
+<button onclick="loadTable('hits',event)">Попадания</button>
+<button onclick="loadTable('assist',event)">Ассист</button>
+
+<div id="table"></div>
+
+<script src="tables.js"></script>
+</body>
+</html>

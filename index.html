@@ -40,15 +40,20 @@ button.active { background:#4a6ed1; border-color:#6f8fff; }
 <div id="dropzone">Перетащите файлы .mtreplay сюда</div>
 <div id="table"></div>
 
+<py-script>
+import json, re, asyncio
+from js import document, fetch
 
-import asyncio
-from js import fetch
-
+DATA = {"battles": []}
+CURRENT_TYPE = "damage"
 TANK_NAME_MAP = {}
 
+# ----------------------------
+# Загрузка словаря танков с GitHub
 async def load_tank_db():
     global TANK_NAME_MAP
-    response = await fetch("https://raw.githubusercontent.com/.../tanks_db.txt")
+    url = "https://raw.githubusercontent.com/uwuny/Test/main/tank_db.txt"
+    response = await fetch(url)
     text = await response.text()
     for line in text.splitlines():
         parts = line.strip().split("\t")
@@ -57,20 +62,14 @@ async def load_tank_db():
             tag = parts[3].split(":")[-1]
             TANK_NAME_MAP[tag] = short_name
 
-# вызвать перед парсингом
 asyncio.ensure_future(load_tank_db())
-<py-script>
-import json, re
-from js import document
-
-DATA = {"battles": []}
-CURRENT_TYPE = "damage"
-TANK_NAME_MAP = {}
 
 def clean_tank_name(code):
     tag = code.split(":")[-1]
     return TANK_NAME_MAP.get(tag, tag)
 
+# ----------------------------
+# Парсер одного реплея
 def parse_replay_text(text):
     blocks = re.findall(r'\{.*?\}', text, flags=re.DOTALL)
     if len(blocks)<2:
@@ -119,6 +118,8 @@ def parse_replay_text(text):
         }
     return {"map": map_name, "win": is_win, "players": players}
 
+# ----------------------------
+# Drag-and-drop обработка файлов
 async def handle_files(files):
     DATA["battles"] = []
     for f in files:
@@ -129,6 +130,8 @@ async def handle_files(files):
             DATA["battles"].append(battle)
     load_table(CURRENT_TYPE, None)
 
+# ----------------------------
+# Строим таблицу
 def load_table(type, btn):
     global CURRENT_TYPE
     CURRENT_TYPE = type
@@ -154,7 +157,8 @@ def load_table(type, btn):
         for i in range(len(battles)):
             cell = battles_dict.get(i)
             if cell and isinstance(cell["value"], (int,float)):
-                sumv+=cell["value"]; count+=1
+                sumv+=cell["value"]
+                count+=1
         averages[name] = round(sumv/count) if count>0 else 0
     html = "<table><tr><th>Ник</th>"
     if type=="hits": html+="<th>%</th>"
@@ -188,6 +192,8 @@ def load_table(type, btn):
     html += "</table>"
     document.getElementById("table").innerHTML = html
 
+# ----------------------------
+# Drag-and-drop события
 dropzone = document.getElementById("dropzone")
 def on_dragover(e): e.preventDefault(); dropzone.classList.add("hover")
 def on_dragleave(e): dropzone.classList.remove("hover")
@@ -199,7 +205,6 @@ async def on_drop(e):
 dropzone.addEventListener("dragover", on_dragover)
 dropzone.addEventListener("dragleave", on_dragleave)
 dropzone.addEventListener("drop", on_drop)
-
 </py-script>
 
 </body>

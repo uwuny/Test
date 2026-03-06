@@ -4,7 +4,7 @@ import json
 
 app = FastAPI()
 
-# Разрешаем все домены (чтобы GitHub Pages мог обращаться)
+# Разрешаем запросы с любого сайта (для GitHub Pages)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -50,10 +50,13 @@ def parse_replay_bytes(data_bytes):
         raise ValueError("Replay не содержит JSON")
     meta = json.loads(blocks[0])
     battle = json.loads(blocks[1])
+
     player_name = meta.get("playerName")
     vehicles_meta = meta.get("vehicles", {})
+
     team_tanks = {}
     my_team = None
+
     for v in vehicles_meta.values():
         name = v.get("name")
         tank_code = v.get("vehicleType", "")
@@ -61,8 +64,10 @@ def parse_replay_bytes(data_bytes):
             team_tanks[name] = clean_tank_name(tank_code)
         if name == player_name:
             my_team = v.get("team")
+
     if my_team is None:
         raise ValueError("Не удалось определить команду")
+
     map_name = meta.get("mapDisplayName") or meta.get("mapName") or "Unknown"
     winner_team = (
         meta.get("winnerTeam")
@@ -70,9 +75,11 @@ def parse_replay_bytes(data_bytes):
         or battle.get("common", {}).get("winnerTeam")
     )
     is_win = (winner_team == my_team)
+
     vehicles_stats = battle.get("vehicles", {})
     players_meta = battle.get("players", {})
     players = {}
+
     for stats_list in vehicles_stats.values():
         if not stats_list: continue
         stats = stats_list[0]
@@ -95,13 +102,13 @@ def parse_replay_bytes(data_bytes):
             "assist_radio": stats.get("damageAssistedRadio", 0),
             "assist_track": stats.get("damageAssistedTrack", 0)
         }
+
     return {
         "map": map_name,
         "win": is_win,
         "players": players
     }
 
-# ---- API endpoint ----
 @app.post("/upload")
 async def upload_replay(file: UploadFile = File(...)):
     data = await file.read()

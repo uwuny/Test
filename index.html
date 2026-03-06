@@ -23,6 +23,8 @@ th:first-child { position:sticky; left:0; z-index:3; background:#262626; }
 button { background:#2b2b2b; color:white; border:1px solid #444; padding:6px 12px; margin:4px; border-radius:6px; font-size:14px; cursor:pointer; }
 button:hover { background:#3a3a3a; border-color:#666; }
 button.active { background:#4a6ed1; border-color:#6f8fff; }
+#dropzone { border:2px dashed #666; border-radius:10px; padding:40px; text-align:center; margin-top:20px; color:#aaa; }
+#dropzone.hover { border-color:#fff; color:#fff; }
 </style>
 
 </head>
@@ -30,33 +32,31 @@ button.active { background:#4a6ed1; border-color:#6f8fff; }
 
 <h2>Статистика</h2>
 
-<button onclick="loadTable('damage')">Урон</button>
-<button onclick="loadTable('damage_received')">Получено</button>
-<button onclick="loadTable('hits')">Попадания</button>
-<button onclick="loadTable('assist')">Ассист</button>
+<button onclick="load_table('damage', this)">Урон</button>
+<button onclick="load_table('damage_received', this)">Получено</button>
+<button onclick="load_table('hits', this)">Попадания</button>
+<button onclick="load_table('assist', this)">Ассист</button>
 
-<input type="file" id="replayInput" multiple accept=".mtreplay">
-
+<div id="dropzone">Перетащите файлы .mtreplay сюда</div>
 <div id="table"></div>
 
 <py-script>
 import json
-from js import document
+import re
+from js import document, console
 
 DATA = {"battles": []}
+CURRENT_TYPE = "damage"
 
-# Пример словаря танков (можно подгружать из файла)
+# Словарь танков (можно заполнить)
 TANK_NAME_MAP = {}
-
 def clean_tank_name(code):
     tag = code.split(":")[-1]
     return TANK_NAME_MAP.get(tag, tag)
 
-# Парсер реплея (упрощённо, как твой Python код)
 def parse_replay_text(text):
-    import re
     blocks = re.findall(r'\{.*?\}', text, flags=re.DOTALL)
-    if len(blocks) < 2:
+    if len(blocks)<2:
         return None
     meta = json.loads(blocks[0])
     battle = json.loads(blocks[1])
@@ -79,15 +79,12 @@ def parse_replay_text(text):
     players_meta = battle.get("players", {})
     players = {}
     for stats_list in vehicles_stats.values():
-        if not stats_list:
-            continue
+        if not stats_list: continue
         stats = stats_list[0]
-        if stats.get("team") != my_team:
-            continue
+        if stats.get("team") != my_team: continue
         acc_id = str(stats.get("accountDBID"))
         player_data = players_meta.get(acc_id)
-        if not player_data:
-            continue
+        if not player_data: continue
         nickname = player_data.get("name")
         players[nickname] = {
             "tank": team_tanks.get(nickname,""),
@@ -105,23 +102,24 @@ def parse_replay_text(text):
         }
     return {"map": map_name, "win": is_win, "players": players}
 
-def handle_files(event):
-    files = event.target.files
+async def handle_files(files):
     DATA["battles"] = []
-    import asyncio
-    async def read_files():
-        for f in files:
-            array_buffer = await f.arrayBuffer()
-            text = str(array_buffer.to_py(), 'utf-8', 'ignore')
-            battle = parse_replay_text(text)
-            if battle:
-                DATA["battles"].append(battle)
-        load_table("damage")
-    asyncio.ensure_future(read_files())
+    for f in files:
+        array_buffer = await f.arrayBuffer()
+        text = str(array_buffer.to_py(), 'utf-8', 'ignore')
+        battle = parse_replay_text(text)
+        if battle:
+            DATA["battles"].append(battle)
+    load_table(CURRENT_TYPE, None)
 
-document.getElementById("replayInput").addEventListener("change", handle_files)
-
-def load_table(type):
+def load_table(type, btn):
+    global CURRENT_TYPE
+    CURRENT_TYPE = type
+    # подсветка кнопок
+    for b in document.querySelectorAll("button"):
+        b.classList.remove("active")
+    if btn:
+        btn.classList.add("active")
     battles = DATA["battles"]
     players = {}
     for i, battle in enumerate(battles):
@@ -134,24 +132,70 @@ def load_table(type):
             if type=="hits": value = f'{p["shots"]}/{p["hits"]}/{p["piercings"]}'
             if type=="assist": value = p["assist_track"] + p["assist_radio"]
             players[name][i] = {**p, "value": value}
-    # Построение HTML таблицы (упрощённо)
+    # среднее
+    averages = {}
+    for name, battles_dict in players.items():
+        sumv = 0
+        count = 0
+        for i in range(len(battles)):
+            cell = battles_dict.get(i)
+            if cell and isinstance(cell["value"], (int,float)):
+                sumv += cell["value"]
+                count += 1
+        averages[name] = round(sumv/count) if count>0 else 0
+    # строим таблицу
     html = "<table><tr><th>Ник</th>"
+    if type=="hits": html+="<th>%</th>"
     for b in battles:
-        result_class = "win" if b["win"] else "lose"
-        html += f'<th class="{result_class}">{b["map"]}</th>'
-    html += "<th>Среднее</th></tr>"
+        cls = "win" if b["win"] else "lose"
+        mapname = b["map"].replace(" ","<br>")
+        html += f'<th class="{cls}">{mapname}</th>'
+    if type!="hits": html += "<th>Среднее</th>"
+    html += "</tr>"
+    # строки игроков
     for name, battles_dict in players.items():
         html += f"<tr><td>{name}</td>"
+        if type=="hits":
+            shots=hits=pen=0
+            for i in range(len(battles)):
+                cell = battles_dict.get(i)
+                if cell:
+                    shots+=cell["shots"]; hits+=cell["hits"]; pen+=cell["piercings"]
+            percent = round(pen/hits*100) if hits>0 else 0
+            html += f"<td>{percent}%</td>"
         for i in range(len(battles)):
             cell = battles_dict.get(i)
             if cell:
                 tank_class = "alive" if cell["alive"] else "dead"
-                html += f'<td><span class="{tank_class}">{cell["tank"]}</span><br>{cell["value"]}</td>'
+                display = cell["value"]
+                if type=="assist":
+                    display = f'{cell["value"]}<br><small>каток:{cell["assist_track"]}/свет:{cell["assist_radio"]}</small>'
+                html += f'<td><span class="{tank_class}">{cell["tank"]}</span><br>{display}</td>'
             else:
                 html += "<td></td>"
-        html += f"<td>0</td></tr>"  # среднее можно добавить позже
+        if type!="hits": html += f"<td>{averages.get(name,0)}</td>"
+        html += "</tr>"
     html += "</table>"
     document.getElementById("table").innerHTML = html
+
+# Drag-and-drop
+dropzone = document.getElementById("dropzone")
+def on_dragover(e):
+    e.preventDefault()
+    dropzone.classList.add("hover")
+def on_dragleave(e):
+    dropzone.classList.remove("hover")
+async def on_drop(e):
+    e.preventDefault()
+    dropzone.classList.remove("hover")
+    files = [f for f in e.dataTransfer.files.to_py() if f.name.endswith(".mtreplay")]
+    if files:
+        await handle_files(files)
+
+dropzone.addEventListener("dragover", on_dragover)
+dropzone.addEventListener("dragleave", on_dragleave)
+dropzone.addEventListener("drop", on_drop)
+
 </py-script>
 
 </body>

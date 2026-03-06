@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
 
-# ---- база танков ----
+
 TANK_NAME_MAP = {}
 with open("tank_db.txt", "r", encoding="utf-8") as f:
     for line in f:

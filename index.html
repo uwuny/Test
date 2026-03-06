@@ -2,38 +2,157 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Статистика боёв</title>
+<title>Статистика боёв (PyScript)</title>
+
+<link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
+<script defer src="https://pyscript.net/latest/pyscript.js"></script>
+
 <style>
-body { background:#1e1e1e; color:white; font-family:Arial; margin:0; padding:0; }
-#table { overflow-x:auto; }
-table { border-collapse:collapse; margin-top:10px; }
+body { background:#1e1e1e; color:white; font-family:Arial, sans-serif; margin:0; padding:20px; }
+#table { overflow-x:auto; margin-top:10px; }
+table { border-collapse:collapse; width:100%; }
 td,th { border:1px solid #444; padding:4px 6px; text-align:center; }
-th { background:#262626; line-height:1.1; }
+th { background:#262626; }
 tr:hover td { background:#2a2a2a; }
-tr:hover td:first-child { background:#333; }
-td:first-child { font-family: Bahnschrift, Arial, sans-serif; font-weight:bold; position:sticky; left:0; z-index:2; background:#1e1e1e; }
+td:first-child { font-weight:bold; position:sticky; left:0; background:#1e1e1e; z-index:2; }
 th:first-child { position:sticky; left:0; z-index:3; background:#262626; }
 .win { background:#2e5e2e; }
 .lose { background:#5e2e2e; }
 .alive { color:#6bd16b; }
 .dead { color:#d16b6b; }
-button { background:#2b2b2b; color:white; border:1px solid #444; padding:6px 12px; margin:4px; border-radius:6px; font-size:14px; cursor:pointer; transition:0.15s; }
+button { background:#2b2b2b; color:white; border:1px solid #444; padding:6px 12px; margin:4px; border-radius:6px; font-size:14px; cursor:pointer; }
 button:hover { background:#3a3a3a; border-color:#666; }
 button.active { background:#4a6ed1; border-color:#6f8fff; }
 </style>
+
 </head>
 <body>
 
 <h2>Статистика</h2>
 
-<input type="file" id="replayInput" multiple>
-<button onclick="loadTable('damage',event)">Урон</button>
-<button onclick="loadTable('damage_received',event)">Получено</button>
-<button onclick="loadTable('hits',event)">Попадания</button>
-<button onclick="loadTable('assist',event)">Ассист</button>
+<button onclick="loadTable('damage')">Урон</button>
+<button onclick="loadTable('damage_received')">Получено</button>
+<button onclick="loadTable('hits')">Попадания</button>
+<button onclick="loadTable('assist')">Ассист</button>
+
+<input type="file" id="replayInput" multiple accept=".mtreplay">
 
 <div id="table"></div>
 
-<script src="tables.js"></script>
+<py-script>
+import json
+from js import document
+
+DATA = {"battles": []}
+
+# Пример словаря танков (можно подгружать из файла)
+TANK_NAME_MAP = {}
+
+def clean_tank_name(code):
+    tag = code.split(":")[-1]
+    return TANK_NAME_MAP.get(tag, tag)
+
+# Парсер реплея (упрощённо, как твой Python код)
+def parse_replay_text(text):
+    import re
+    blocks = re.findall(r'\{.*?\}', text, flags=re.DOTALL)
+    if len(blocks) < 2:
+        return None
+    meta = json.loads(blocks[0])
+    battle = json.loads(blocks[1])
+    player_name = meta.get("playerName")
+    vehicles_meta = meta.get("vehicles", {})
+    team_tanks = {}
+    my_team = None
+    for v in vehicles_meta.values():
+        name = v.get("name")
+        if name:
+            team_tanks[name] = clean_tank_name(v.get("vehicleType",""))
+        if name == player_name:
+            my_team = v.get("team")
+    if my_team is None:
+        return None
+    map_name = meta.get("mapDisplayName") or meta.get("mapName") or "Unknown"
+    winner_team = meta.get("winnerTeam") or battle.get("winnerTeam") or battle.get("common", {}).get("winnerTeam")
+    is_win = (winner_team == my_team)
+    vehicles_stats = battle.get("vehicles", {})
+    players_meta = battle.get("players", {})
+    players = {}
+    for stats_list in vehicles_stats.values():
+        if not stats_list:
+            continue
+        stats = stats_list[0]
+        if stats.get("team") != my_team:
+            continue
+        acc_id = str(stats.get("accountDBID"))
+        player_data = players_meta.get(acc_id)
+        if not player_data:
+            continue
+        nickname = player_data.get("name")
+        players[nickname] = {
+            "tank": team_tanks.get(nickname,""),
+            "alive": stats.get("health",0) > 0,
+            "damage": stats.get("damageDealt",0),
+            "damage_received": stats.get("damageReceived",0),
+            "shots": stats.get("shots",0),
+            "hits": stats.get("directHits",0),
+            "frags": stats.get("kills",0),
+            "spot": stats.get("spotted",0),
+            "blocked": stats.get("damageBlockedByArmor",0),
+            "piercings": stats.get("piercings",0),
+            "assist_radio": stats.get("damageAssistedRadio",0),
+            "assist_track": stats.get("damageAssistedTrack",0)
+        }
+    return {"map": map_name, "win": is_win, "players": players}
+
+def handle_files(event):
+    files = event.target.files
+    DATA["battles"] = []
+    import asyncio
+    async def read_files():
+        for f in files:
+            array_buffer = await f.arrayBuffer()
+            text = str(array_buffer.to_py(), 'utf-8', 'ignore')
+            battle = parse_replay_text(text)
+            if battle:
+                DATA["battles"].append(battle)
+        load_table("damage")
+    asyncio.ensure_future(read_files())
+
+document.getElementById("replayInput").addEventListener("change", handle_files)
+
+def load_table(type):
+    battles = DATA["battles"]
+    players = {}
+    for i, battle in enumerate(battles):
+        for name, p in battle["players"].items():
+            if name not in players:
+                players[name] = {}
+            value = 0
+            if type=="damage": value = p["damage"]
+            if type=="damage_received": value = p["damage_received"]
+            if type=="hits": value = f'{p["shots"]}/{p["hits"]}/{p["piercings"]}'
+            if type=="assist": value = p["assist_track"] + p["assist_radio"]
+            players[name][i] = {**p, "value": value}
+    # Построение HTML таблицы (упрощённо)
+    html = "<table><tr><th>Ник</th>"
+    for b in battles:
+        result_class = "win" if b["win"] else "lose"
+        html += f'<th class="{result_class}">{b["map"]}</th>'
+    html += "<th>Среднее</th></tr>"
+    for name, battles_dict in players.items():
+        html += f"<tr><td>{name}</td>"
+        for i in range(len(battles)):
+            cell = battles_dict.get(i)
+            if cell:
+                tank_class = "alive" if cell["alive"] else "dead"
+                html += f'<td><span class="{tank_class}">{cell["tank"]}</span><br>{cell["value"]}</td>'
+            else:
+                html += "<td></td>"
+        html += f"<td>0</td></tr>"  # среднее можно добавить позже
+    html += "</table>"
+    document.getElementById("table").innerHTML = html
+</py-script>
+
 </body>
 </html>

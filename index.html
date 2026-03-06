@@ -40,6 +40,25 @@ button.active { background:#4a6ed1; border-color:#6f8fff; }
 <div id="dropzone">Перетащите файлы .mtreplay сюда</div>
 <div id="table"></div>
 
+
+import asyncio
+from js import fetch
+
+TANK_NAME_MAP = {}
+
+async def load_tank_db():
+    global TANK_NAME_MAP
+    response = await fetch("https://raw.githubusercontent.com/.../tanks_db.txt")
+    text = await response.text()
+    for line in text.splitlines():
+        parts = line.strip().split("\t")
+        if len(parts) >= 4:
+            short_name = parts[1]
+            tag = parts[3].split(":")[-1]
+            TANK_NAME_MAP[tag] = short_name
+
+# вызвать перед парсингом
+asyncio.ensure_future(load_tank_db())
 <py-script>
 import json, re
 from js import document
